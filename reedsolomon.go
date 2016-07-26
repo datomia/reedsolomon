@@ -652,14 +652,6 @@ func (r reedSolomon) ReconstructData(shards [][]byte) error {
 	return r.reconstruct(shards, true)
 }
 
-// reconstruct will recreate the missing data shards, and unless
-// dataOnly is true, also the missing parity shards
-//
-// The length of the array must be equal to Shards.
-// You indicate that a shard is missing by setting it to nil.
-//
-// If there are too few shards to reconstruct the missing
-// ones, ErrTooFewShards will be returned.
 func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool) error {
 >>>>>>> Add ReconstructData interface method (#57)
 	if len(shards) != r.Shards {
@@ -683,16 +675,28 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool) error {
 	// Quick check: are all of the shards present?  If so, there's
 	// nothing to do.
 	numberPresent := 0
+<<<<<<< HEAD
 	requiredPresent := 0
 	for i := 0; i < r.Shards; i++ {
 		if len(shards[i]) != 0 {
 			if len(idxs) > 0 && contains(idxs, i) {
 				requiredPresent++
+=======
+	dataPresent := 0
+	for i := 0; i < r.Shards; i++ {
+		if len(shards[i]) != 0 {
+			if i < r.DataShards {
+				dataPresent++
+>>>>>>> Allow to skip parity reconstruction
 			}
 			numberPresent++
 		}
 	}
+<<<<<<< HEAD
 	if numberPresent == r.Shards || (len(idxs) > 0 && len(idxs) == requiredPresent) {
+=======
+	if numberPresent == r.Shards || (dataOnly && dataPresent == r.DataShards) {
+>>>>>>> Allow to skip parity reconstruction
 		// Cool.  All of the shards data data.  We don't
 		// need to do anything.
 		return nil
@@ -810,12 +814,17 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool) error {
 <<<<<<< HEAD
 =======
 
+
 	if dataOnly {
 		// Exit out early if we are only interested in the data shards
 		return nil
 	}
 
+<<<<<<< HEAD
 >>>>>>> Add ReconstructData interface method (#57)
+=======
+
+>>>>>>> Allow to skip parity reconstruction
 	// Now that we have all of the data shards intact, we can
 	// compute any of the parity that is missing.
 	//
