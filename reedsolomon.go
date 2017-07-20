@@ -51,6 +51,21 @@ type Encoder interface {
 	// Use the Verify function to check if data set is ok.
 	Reconstruct(shards [][]byte, idxs ...int) error
 
+	// ReconstructData will recreate any missing data shards, if possible.
+	//
+	// Given a list of shards, some of which contain data, fills in the
+	// data shards that don't have data.
+	//
+	// The length of the array must be equal to Shards.
+	// You indicate that a shard is missing by setting it to nil.
+	//
+	// If there are too few shards to reconstruct the missing
+	// ones, ErrTooFewShards will be returned.
+	//
+	// As the reconstructed shard set may contain missing parity shards,
+	// calling the Verify function is likely to fail.
+	ReconstructData(shards [][]byte) error
+
 	// Split a data slice into the number of shards given to the encoder,
 	// and create empty parity shards.
 	//
@@ -438,11 +453,44 @@ func shardSize(shards [][]byte) int {
 //
 // The reconstructed shard set is complete, but integrity is not verified.
 // Use the Verify function to check if data set is ok.
+<<<<<<< HEAD
 func (r reedSolomon) Reconstruct(shards [][]byte, idxs ...int) error {
 	return r.reconstruct(shards, idxs...)
 }
 
 func (r reedSolomon) reconstruct(shards [][]byte, idxs ...int) error {
+=======
+func (r reedSolomon) Reconstruct(shards [][]byte) error {
+	return r.reconstruct(shards, false)
+}
+
+// ReconstructData will recreate any missing data shards, if possible.
+//
+// Given a list of shards, some of which contain data, fills in the
+// data shards that don't have data.
+//
+// The length of the array must be equal to Shards.
+// You indicate that a shard is missing by setting it to nil.
+//
+// If there are too few shards to reconstruct the missing
+// ones, ErrTooFewShards will be returned.
+//
+// As the reconstructed shard set may contain missing parity shards,
+// calling the Verify function is likely to fail.
+func (r reedSolomon) ReconstructData(shards [][]byte) error {
+	return r.reconstruct(shards, true)
+}
+
+// reconstruct will recreate the missing data shards, and unless
+// dataOnly is true, also the missing parity shards
+//
+// The length of the array must be equal to Shards.
+// You indicate that a shard is missing by setting it to nil.
+//
+// If there are too few shards to reconstruct the missing
+// ones, ErrTooFewShards will be returned.
+func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool) error {
+>>>>>>> Add ReconstructData interface method (#57)
 	if len(shards) != r.Shards {
 		return ErrTooFewShards
 	}
@@ -580,6 +628,15 @@ func (r reedSolomon) reconstruct(shards [][]byte, idxs ...int) error {
 		}
 	}
 	r.codeSomeShards(matrixRows, subShards, outputs[:outputCount], outputCount, shardSize)
+<<<<<<< HEAD
+=======
+
+	if dataOnly {
+		// Exit out early if we are only interested in the data shards
+		return nil
+	}
+
+>>>>>>> Add ReconstructData interface method (#57)
 	// Now that we have all of the data shards intact, we can
 	// compute any of the parity that is missing.
 	//

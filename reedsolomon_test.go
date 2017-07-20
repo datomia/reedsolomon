@@ -250,6 +250,7 @@ func testReconstruct(t *testing.T, o ...Option) {
 	}
 }
 
+<<<<<<< HEAD
 func TestReconstructWithIndexes(t *testing.T) {
 	perShard := 50000
 	dataShards := 10
@@ -260,12 +261,32 @@ func TestReconstructWithIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 	shards := make([][]byte, totalShards)
+=======
+func TestReconstructData(t *testing.T) {
+	testReconstructData(t)
+	for _, o := range testOpts() {
+		testReconstruct(t, o...)
+	}
+}
+
+func testReconstructData(t *testing.T, o ...Option) {
+	perShard := 100000
+	r, err := New(8, 5, o...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shards := make([][]byte, 13)
+>>>>>>> Add ReconstructData interface method (#57)
 	for s := range shards {
 		shards[s] = make([]byte, perShard)
 	}
 
 	rand.Seed(0)
+<<<<<<< HEAD
 	for s := 0; s < totalShards; s++ {
+=======
+	for s := 0; s < 13; s++ {
+>>>>>>> Add ReconstructData interface method (#57)
 		fillRandom(shards[s])
 	}
 
@@ -275,21 +296,33 @@ func TestReconstructWithIndexes(t *testing.T) {
 	}
 
 	// Reconstruct with all shards present
+<<<<<<< HEAD
 	err = r.Reconstruct(shards)
+=======
+	err = r.ReconstructData(shards)
+>>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Reconstruct with 10 shards present
 	shards[0] = nil
+<<<<<<< HEAD
 	shards[7] = nil
 	shards[11] = nil
 
 	err = r.Reconstruct(shards, 0, 7, 11)
+=======
+	shards[2] = nil
+	shards[4] = nil
+
+	err = r.ReconstructData(shards)
+>>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+<<<<<<< HEAD
 	// Check that parity shards do not get reconstructed
 	shard0 := shards[0]
 	shard2 := shards[2]
@@ -315,10 +348,28 @@ func TestReconstructWithIndexes(t *testing.T) {
 
 	// Reset all shards
 	err = r.Reconstruct(shards)
+=======
+	// Since all parity shards are available, verification will succeed
+	ok, err := r.Verify(shards)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("Verification failed")
+	}
+
+	// Reconstruct with 6 data and 4 parity shards
+	shards[0] = nil
+	shards[2] = nil
+	shards[12] = nil
+
+	err = r.ReconstructData(shards)
+>>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+<<<<<<< HEAD
 	// Check that only required parity shard is reconstructed.
 	shard0 = shards[0]
 	shard2 = shards[2]
@@ -329,10 +380,27 @@ func TestReconstructWithIndexes(t *testing.T) {
 	shards[12] = nil
 
 	err = r.Reconstruct(shards, 0, 2, 12)
+=======
+	// Verification will fail now due to absence of a parity block
+	_, err = r.Verify(shards)
+	if err != ErrShardSize {
+		t.Errorf("expected %v, got %v", ErrTooFewShards, err)
+	}
+
+	// Reconstruct with 7 data and 1 parity shards
+	shards[0] = nil
+	shards[9] = nil
+	shards[10] = nil
+	shards[11] = nil
+	shards[12] = nil
+
+	err = r.ReconstructData(shards)
+>>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+<<<<<<< HEAD
 	if bytes.Compare(shard0, shards[0]) != 0 ||
 		bytes.Compare(shard2, shards[2]) != 0 ||
 		bytes.Compare(shard12, shards[12]) != 0 {
@@ -353,6 +421,33 @@ func TestReconstructWithIndexes(t *testing.T) {
 	err = r.Reconstruct(shards, totalShards)
 	if err == nil {
 		t.Fatal("out of range case. Error expected")
+=======
+	_, err = r.Verify(shards)
+	if err != ErrShardSize {
+		t.Errorf("expected %v, got %v", ErrTooFewShards, err)
+	}
+
+	// Reconstruct with 6 data and 1 parity shards (should fail)
+	shards[0] = nil
+	shards[1] = nil
+	shards[9] = nil
+	shards[10] = nil
+	shards[11] = nil
+	shards[12] = nil
+
+	err = r.ReconstructData(shards)
+	if err != ErrTooFewShards {
+		t.Errorf("expected %v, got %v", ErrTooFewShards, err)
+	}
+
+	err = r.ReconstructData(make([][]byte, 1))
+	if err != ErrTooFewShards {
+		t.Errorf("expected %v, got %v", ErrTooFewShards, err)
+	}
+	err = r.ReconstructData(make([][]byte, 13))
+	if err != ErrShardNoData {
+		t.Errorf("expected %v, got %v", ErrShardNoData, err)
+>>>>>>> Add ReconstructData interface method (#57)
 	}
 }
 
@@ -734,6 +829,79 @@ func BenchmarkReconstruct50x20x1M(b *testing.B) {
 // Benchmark 10 data slices with 4 parity slices holding 16MB bytes each
 func BenchmarkReconstruct10x4x16M(b *testing.B) {
 	benchmarkReconstruct(b, 10, 4, 16*1024*1024)
+}
+
+func corruptRandomData(shards [][]byte, dataShards, parityShards int) {
+	shardsToCorrupt := rand.Intn(parityShards)
+	for i := 1; i <= shardsToCorrupt; i++ {
+		shards[rand.Intn(dataShards)] = nil
+	}
+}
+
+func benchmarkReconstructData(b *testing.B, dataShards, parityShards, shardSize int) {
+	r, err := New(dataShards, parityShards)
+	if err != nil {
+		b.Fatal(err)
+	}
+	shards := make([][]byte, parityShards+dataShards)
+	for s := range shards {
+		shards[s] = make([]byte, shardSize)
+	}
+
+	rand.Seed(0)
+	for s := 0; s < dataShards; s++ {
+		fillRandom(shards[s])
+	}
+	err = r.Encode(shards)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(int64(shardSize * dataShards))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		corruptRandomData(shards, dataShards, parityShards)
+
+		err = r.ReconstructData(shards)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Benchmark 10 data slices with 2 parity slices holding 10000 bytes each
+func BenchmarkReconstructData10x2x10000(b *testing.B) {
+	benchmarkReconstructData(b, 10, 2, 10000)
+}
+
+// Benchmark 50 data slices with 5 parity slices holding 100000 bytes each
+func BenchmarkReconstructData50x5x50000(b *testing.B) {
+	benchmarkReconstructData(b, 50, 5, 100000)
+}
+
+// Benchmark 10 data slices with 2 parity slices holding 1MB bytes each
+func BenchmarkReconstructData10x2x1M(b *testing.B) {
+	benchmarkReconstructData(b, 10, 2, 1024*1024)
+}
+
+// Benchmark 5 data slices with 2 parity slices holding 1MB bytes each
+func BenchmarkReconstructData5x2x1M(b *testing.B) {
+	benchmarkReconstructData(b, 5, 2, 1024*1024)
+}
+
+// Benchmark 10 data slices with 4 parity slices holding 1MB bytes each
+func BenchmarkReconstructData10x4x1M(b *testing.B) {
+	benchmarkReconstructData(b, 10, 4, 1024*1024)
+}
+
+// Benchmark 5 data slices with 2 parity slices holding 1MB bytes each
+func BenchmarkReconstructData50x20x1M(b *testing.B) {
+	benchmarkReconstructData(b, 50, 20, 1024*1024)
+}
+
+// Benchmark 10 data slices with 4 parity slices holding 16MB bytes each
+func BenchmarkReconstructData10x4x16M(b *testing.B) {
+	benchmarkReconstructData(b, 10, 4, 16*1024*1024)
 }
 
 func benchmarkReconstructP(b *testing.B, dataShards, parityShards, shardSize int) {
