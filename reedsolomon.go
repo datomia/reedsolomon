@@ -37,6 +37,7 @@ type Encoder interface {
 	Verify(shards [][]byte) (bool, error)
 
 	// Reconstruct will recreate the missing shards if possible.
+	// If idxs argument is specified then only shards at specified indexes will be reconstructed.
 	//
 	// Given a list of shards, some of which contain data, fills in the
 	// ones that don't have data.
@@ -49,18 +50,7 @@ type Encoder interface {
 	//
 	// The reconstructed shard set is complete, but integrity is not verified.
 	// Use the Verify function to check if data set is ok.
-	Reconstruct(shards [][]byte) error
-
-	// ReconstructData will recreate the missing data shards if possible.
-	//
-	// Behavior is similar to Reconstruct, but it will not rebuild parity shards.
-	ReconstructData(shards [][]byte) error
-
-	// ReconstructAtoms will recreate the missing shards if possible.
-	//
-	// Behavior is similar to Reconstruct, but it will rebuild only atoms at idxs
-	// and also all data atoms if any of the requested index is a parity shard index.
-	ReconstructAtoms(shards [][]byte, idxs ...int) error
+	Reconstruct(shards [][]byte, idxs ...int) error
 
 	// Split a data slice into the number of shards given to the encoder,
 	// and create empty parity shards.
@@ -361,33 +351,7 @@ func shardSize(shards [][]byte) int {
 //
 // The reconstructed shard set is complete, but integrity is not verified.
 // Use the Verify function to check if data set is ok.
-func (r reedSolomon) Reconstruct(shards [][]byte) error {
-	return r.reconstructP(shards, true)
-}
-
-// ReconstructData will recreate the missing data shards if possible.
-//
-// Behavior is similar to Reconstruct, but it will not rebuild parity shards.
-func (r reedSolomon) ReconstructData(shards [][]byte) error {
-	return r.reconstructP(shards, false)
-}
-
-// ReconstructAtoms will recreate the missing shards if possible.
-//
-// Behavior is similar to Reconstruct, but it will rebuild only atoms at idxs
-// and also all data atoms if any of the requested index is a parity shard index.
-func (r reedSolomon) ReconstructAtoms(shards [][]byte, idxs ...int) error {
-	return r.reconstruct(shards, idxs...)
-}
-
-func (r reedSolomon) reconstructP(shards [][]byte, parity bool) error {
-	if parity {
-		return r.reconstruct(shards)
-	}
-	idxs := make([]int, r.DataShards)
-	for i := 0; i < r.DataShards; i++ {
-		idxs[i] = i
-	}
+func (r reedSolomon) Reconstruct(shards [][]byte, idxs ...int) error {
 	return r.reconstruct(shards, idxs...)
 }
 
@@ -413,16 +377,16 @@ func (r reedSolomon) reconstruct(shards [][]byte, idxs ...int) error {
 	// Quick check: are all of the shards present?  If so, there's
 	// nothing to do.
 	numberPresent := 0
-	dataPresent := 0
+	requiredPresent := 0
 	for i := 0; i < r.Shards; i++ {
 		if len(shards[i]) != 0 {
 			if len(idxs) > 0 && contains(idxs, i) {
-				dataPresent++
+				requiredPresent++
 			}
 			numberPresent++
 		}
 	}
-	if numberPresent == r.Shards || (len(idxs) > 0 && len(idxs) == dataPresent) {
+	if numberPresent == r.Shards || (len(idxs) > 0 && len(idxs) == requiredPresent) {
 		// Cool.  All of the shards data data.  We don't
 		// need to do anything.
 		return nil
