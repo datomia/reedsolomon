@@ -16,7 +16,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
+
+	"github.com/klauspost/cpuid"
 )
 
 // Encoder is an interface to encode Reed-Salomon parity sets for your data.
@@ -241,6 +244,33 @@ func New(dataShards, parityShards int, opts ...Option) (Encoder, error) {
 	if err != nil {
 		return nil, err
 	}
+	if r.o.shardSize > 0 {
+		cacheSize := cpuid.CPU.Cache.L2
+		if cacheSize <= 0 {
+			// Set to 128K if undetectable.
+			cacheSize = 128 << 10
+		}
+		p := runtime.NumCPU()
+
+		// 1 input + parity must fit in cache, and we add one more to be safer.
+		shards := 1 + parityShards
+		g := (r.o.shardSize * shards) / (cacheSize - (cacheSize >> 4))
+
+		if cpuid.CPU.ThreadsPerCore > 1 {
+			// If multiple threads per core, make sure they don't contend for cache.
+			g *= cpuid.CPU.ThreadsPerCore
+		}
+		g *= 2
+		if g < p {
+			g = p
+		}
+
+		// Have g be multiple of p
+		g += p - 1
+		g -= g % p
+
+		r.o.maxGoroutines = g
+	}
 
 	// Inverted matrices are cached in a tree keyed by the indices
 	// of the invalid rows of the data to reconstruct.
@@ -433,6 +463,8 @@ func (r reedSolomon) codeSomeShardsP(matrixRows, inputs, outputs [][]byte, outpu
 	if do < r.o.minSplitSize {
 		do = r.o.minSplitSize
 	}
+	// Make sizes divisible by 16
+	do = (do + 15) & (^15)
 	start := 0
 	for start < byteCount {
 		if start+do > byteCount {
@@ -492,6 +524,8 @@ func (r reedSolomon) checkSomeShardsP(matrixRows, inputs, toCheck [][]byte, outp
 	if do < r.o.minSplitSize {
 		do = r.o.minSplitSize
 	}
+	// Make sizes divisible by 16
+	do = (do + 15) & (^15)
 	start := 0
 	for start < byteCount {
 		if start+do > byteCount {
