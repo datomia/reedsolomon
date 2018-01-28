@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"io/ioutil"
+	"io"
 )
 
 // Encoder is an interface to encode HashTagCode parity sets for your data.
@@ -44,6 +45,8 @@ type HashTagCodec interface {
 	//
 	// The reconstructed shard set is complete, but integrity is not verified.
 	// Use the Verify function to check if data set is ok.
+	Repair(fname string, pIfFailedSN []bool, subshardSize int, shards [][]byte) error
+	Reconstruct(fname string, subshardSize int, shards [][]byte) error
 //	Reconstruct(shards [][]byte, idxs ...int) error
 
 	// Split a data slice into the number of subshards given to the encoder,
@@ -66,20 +69,25 @@ type HashTagCodec interface {
 	// You must supply the exact output size you want.
 	// If there are to few shards given, ErrTooFewShards will be returned.
 	// If the total data size is less than outSize, ErrShortData will be returned.
-//	Join(dst io.Writer, shards [][]byte, outSize int) error
+	Join(dst io.Writer, shards [][]byte, outSize int) error
 }
 
-// reedSolomon contains a matrix for a specific
-// distribution of datashards and parity shards.
-// Construct if using New()
+// HashTag contains a matrices of indices and coefficients.
 type HashTag struct {
 	DataShards   int // Number of data shards, should not be modified.
 	ParityShards int // Number of parity shards, should not be modified.
 	Shards       int // Total number of shards. Calculated, and should not be modified.
 	Alpha        int
-	ppIndexArrayP           [][]byte
-	ppCoefficients          [][]byte
-	ppPartitions            [][]byte
+	k_div_r      int
+	ppIndexArrayP             [][]int
+	ppCoefficients            [][]byte
+	ppPartitions              [][]int
+	// for repair
+	//FailedNodeID              int
+	//NumOfExpr                 int
+	pExpressionLength         []int
+	ppExpressionElements      [][]int
+	ppExpressionCoefficients  [][]byte
 }
 
 // ErrInvShardNum will be returned by New, if you attempt to create
@@ -93,15 +101,13 @@ type HashTag struct {
 // Galois field GF(2^8) - 1.
 //var ErrMaxShardNum = errors.New("cannot create HashTagCodec with 255 or more data+parity shards")
 
-func readHashTagSpec(n int, r int, alpha int, filePath string) (nums []int, err error) {
+func (r HashTag) readHashTagSpec(filePath string) (nums []int, err error) {
 	b, err := ioutil.ReadFile(filePath)
 	if err != nil { return nil, err }
 
 	lines := strings.Split(string(b), "\n")
 
-	k:=n-r
-	k_div_r := int((k + r - 1) / r) // ???
-	numOfIntElements:=r*alpha*(k+k_div_r)*3+k_div_r*alpha
+	numOfIntElements:=r.ParityShards*r.Alpha*(r.DataShards+r.k_div_r)*3+r.k_div_r*r.Alpha
 	// Assign cap to avoid resize on every append.
 	nums = make([]int, 0, numOfIntElements)
 	j:=0
@@ -111,7 +117,7 @@ func readHashTagSpec(n int, r int, alpha int, filePath string) (nums []int, err 
 		for _,a := range li {
 			if len(a) == 0 { continue }
 			if a == "\r" {
-				fmt.Fprint(os.Stdout,"\n")
+				//fmt.Fprint(os.Stdout,"\n")
 				break
 			}
 			w, err := strconv.Atoi(a)
@@ -120,7 +126,7 @@ func readHashTagSpec(n int, r int, alpha int, filePath string) (nums []int, err 
 				return nil, err
 			}
 			nums = append(nums, w)
-			fmt.Fprint(os.Stdout,w," ")
+			//fmt.Fprint(os.Stdout,w," ")
 		}
 		if j==numOfIntElements { break }
 	}
@@ -139,6 +145,7 @@ func NewHashTagCode(dataShards, parityShards, alpha int) (HashTagCodec, error) {
 		Alpha:        alpha,
 	}
 	extension := 8
+	r.k_div_r = int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
 
 	if dataShards <= 0 || parityShards <= 0 {
 		return nil, ErrInvShardNum
@@ -149,20 +156,18 @@ func NewHashTagCode(dataShards, parityShards, alpha int) (HashTagCodec, error) {
 	//}
 
 	filePath := fmt.Sprintf("HashTagSpecifications/Spec_r%d_alpha%d/Spec_n%d_r%d_alpha%d_m%d.txt",r.ParityShards,r.Alpha,r.Shards,r.ParityShards,r.Alpha,extension)
-	nums, err := readHashTagSpec(r.Shards,r.ParityShards,r.Alpha,filePath)
+	nums, err := r.readHashTagSpec(filePath)
 	if err != nil { panic(err) }
 	fmt.Println(len(nums))
 
-	k_div_r := int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
-
-	r.ppIndexArrayP = make([][]byte, r.ParityShards*r.Alpha)
+	r.ppIndexArrayP = make([][]int, r.ParityShards*r.Alpha)
 
 	t:=0
 	for c := 0; c < r.ParityShards; c++ {
 		for iRow := 0; iRow < r.Alpha; iRow++ {
-			r.ppIndexArrayP[iRow+c*r.Alpha] = make([]byte,2*(r.DataShards+k_div_r))
-			for iCol := 0; iCol < 2*(r.DataShards+k_div_r); iCol++ {
-				r.ppIndexArrayP[iRow+c*r.Alpha][iCol] = byte(nums[t])
+			r.ppIndexArrayP[iRow+c*r.Alpha] = make([]int,2*(r.DataShards+r.k_div_r))
+			for iCol := 0; iCol < 2*(r.DataShards+r.k_div_r); iCol++ {
+				r.ppIndexArrayP[iRow+c*r.Alpha][iCol] = nums[t]
 				t++
 			}
 		}
@@ -171,22 +176,36 @@ func NewHashTagCode(dataShards, parityShards, alpha int) (HashTagCodec, error) {
 	r.ppCoefficients = make([][]byte, r.ParityShards*r.Alpha)
 	for c := 0; c < r.ParityShards; c++ {
 		for iRow := 0; iRow < r.Alpha; iRow++ {
-			r.ppCoefficients[iRow+c*r.Alpha] = make([]byte,r.DataShards+k_div_r)
-			for iCol := 0; iCol < r.DataShards+k_div_r; iCol++ {
+			r.ppCoefficients[iRow+c*r.Alpha] = make([]byte,r.DataShards+r.k_div_r)
+			for iCol := 0; iCol < r.DataShards+r.k_div_r; iCol++ {
 				r.ppCoefficients[iRow+c*r.Alpha][iCol] = byte(nums[t])
 				t++
 			}
 		}
 	}
 
-	r.ppPartitions = make([][]byte, k_div_r)
-	for iRow := 0; iRow < k_div_r; iRow++ {
-		r.ppPartitions[iRow] = make([]byte,r.Alpha)
+	r.ppPartitions = make([][]int, r.k_div_r)
+	for iRow := 0; iRow < r.k_div_r; iRow++ {
+		r.ppPartitions[iRow] = make([]int,r.Alpha)
 		for iCol := 0; iCol < r.Alpha; iCol++ {
-			r.ppPartitions[iRow][iCol] = byte(nums[t])
+			r.ppPartitions[iRow][iCol] = nums[t]
 			t++
 		}
 	}
+	// memory for repair
+	//r.FailedNodeID = -1
+	//r.NumOfExpr = 0
+	maxExprLength := 2 * (r.DataShards + r.k_div_r + 1)
+	maxExprNum := r.ParityShards*r.Alpha
+	r.ppExpressionElements = make([][]int,maxExprNum)
+	for i := 0; i < maxExprNum; i++ {
+		r.ppExpressionElements[i] = make([]int,2 * maxExprLength)
+	}
+	r.ppExpressionCoefficients = make([][]byte,maxExprNum)
+	for i := 0; i < maxExprNum; i++ {
+		r.ppExpressionCoefficients[i] = make([]byte,maxExprLength)
+	}
+	r.pExpressionLength = make([]int,maxExprNum)
 	return &r, err
 }
 
@@ -228,7 +247,7 @@ func (r HashTag) Encode(subshards [][]byte) error {
 // The number of outputs computed, and the
 // number of matrix rows used, is determined by
 // outputCount, which is the number of outputs to compute.
-func (r HashTag) codeSomeShards(ppIndexArrayP, ppCoefficients, inputs, outputs [][]byte, outputCount, byteCount int) {
+func (r HashTag) codeSomeShards(ppIndexArrayP [][]int, ppCoefficients, inputs, outputs [][]byte, outputCount, byteCount int) {
 	/*if runtime.GOMAXPROCS(0) > 1 && len(inputs[0]) > minSplitSize {
 		r.codeSomeShardsP(matrixRows, inputs, outputs, outputCount, byteCount)
 		return
@@ -247,22 +266,17 @@ func (r HashTag) codeSomeShards(ppIndexArrayP, ppCoefficients, inputs, outputs [
 		}
 	}
 	// Encoding for k_div_r last columns of array ppIndexArrayP
-	k_div_r := int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
 	for iRow := 0; iRow < outputCount; iRow++ {
 		for ci := 0;ci < r.Alpha; ci++ {
-			for i := 0;i < k_div_r; i++ {
-				subshardID := int(ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)])
-				shardID := int(ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)+1])
+			for i := 0;i < r.k_div_r; i++ {
+				subshardID := ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)]
+				shardID := ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)+1]
 				in := inputs[shardID*r.Alpha+subshardID]
 				galMulSliceXor(ppCoefficients[iRow*r.Alpha+ci][r.DataShards+i], in, outputs[iRow*r.Alpha+ci])
 			}
 		}
 	}
 }
-
-// ErrShortData will be returned by Split(), if there isn't enough data
-// to fill the number of shards.
-//var ErrShortData = errors.New("not enough data to fill the number of requested shards")
 
 // Split a data slice into the number of subshards given to the encoder,
 // and create empty parity subshards.
@@ -296,4 +310,62 @@ func (r HashTag) Split(data []byte) ([][]byte, error) {
 
 	return dst, nil
 }
+
+// Join the shards and write the data segment to dst.
+//
+// Only the data shards are considered.
+// You must supply the exact output size you want.
+// If there are to few shards given, ErrTooFewShards will be returned.
+// If the total data size is less than outSize, ErrShortData will be returned.
+func (r HashTag) Join(dst io.Writer, shards [][]byte, outSize int) error {
+	// Do we have enough shards?
+	if len(shards) < r.DataShards*r.Alpha {
+		return ErrTooFewShards
+	}
+	shards = shards[:r.DataShards*r.Alpha]
+
+	// Do we have enough data?
+	size := 0
+	for _, shard := range shards {
+		size += len(shard)
+	}
+	if size < outSize {
+		return ErrShortData
+	}
+
+	// Copy data to dst
+	write := outSize
+	for _, shard := range shards {
+		if write < len(shard) {
+			_, err := dst.Write(shard[:write])
+			return err
+		}
+		n, err := dst.Write(shard)
+		if err != nil {
+			return err
+		}
+		write -= n
+	}
+	return nil
+}
+
+// WriteFile writes data to a file named by filename.
+// If the file does not exist, WriteFile creates it with permissions perm;
+// otherwise WriteFile truncates it before writing.
+func WriteSubshardsIntoFile(filename string, data [][]byte, alpha int, perm os.FileMode) error {
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	for i:=0; i<alpha; i++ {
+		f.Write(data[i])
+	}
+	if err1 := f.Close(); err == nil {
+		err = err1
+	}
+	return err
+}
+
+
+
 

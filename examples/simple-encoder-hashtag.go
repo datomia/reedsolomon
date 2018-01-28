@@ -42,7 +42,6 @@ import (
 	"os"
 	"path/filepath"
 	"reedsolomon.git/trunk"
-	//"github.com/klauspost/reedsolomon"
 )
 
 var dataShards = flag.Int("data", 4, "Number of shards to split the data into, must be below 257.")
@@ -56,26 +55,6 @@ func init() {
 		fmt.Fprintf(os.Stderr, "Valid flags:\n")
 		flag.PrintDefaults()
 	}
-}
-
-// WriteFile writes data to a file named by filename.
-// If the file does not exist, WriteFile creates it with permissions perm;
-// otherwise WriteFile truncates it before writing.
-func WriteSubshardsIntoFile(filename string, data [][]byte, alpha int, perm os.FileMode) error {
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	for i:=0; i<alpha; i++ {
-		/*n, err := */f.Write(data[i])
-		/*if err == nil && n < len(data[i]) {
-			err = io.ErrShortWrite
-		}*/
-	}
-	if err1 := f.Close(); err == nil {
-		err = err1
-	}
-	return err
 }
 
 func main() {
@@ -141,7 +120,7 @@ func main() {
 		outfn := fmt.Sprintf("%s.%d", file, i)
 
 		fmt.Println("Writing to", outfn)
-		err = WriteSubshardsIntoFile(filepath.Join(dir, outfn), shards[i*alpha:(i+1)*alpha], alpha, os.ModePerm) // ???
+		err = reedsolomon.WriteSubshardsIntoFile(filepath.Join(dir, outfn), shards[i*alpha:(i+1)*alpha], alpha, os.ModePerm)
 		//err = ioutil.WriteFile(filepath.Join(dir, outfn), shard, os.ModePerm)
 		checkErr(err)
 	}
