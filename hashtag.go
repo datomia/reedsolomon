@@ -147,7 +147,43 @@ func (r HashTag) readHashTagSpec(filePath string) (nums []int, err error) {
 
 	return nums, nil
 }
+// parses the []int read from HashTagSpec into ppIndexArrayP ppCoefficients ppPartitions
+// currently works under the assumption that parsing always works, no error handling implemented yet
+func (r *HashTag) parseHashTagSpec(nums []int) error {
 
+	r.ppIndexArrayP = make([][]int, r.ParityShards*r.Alpha)
+	t:=0
+	for c := 0; c < r.ParityShards; c++ {
+		for iRow := 0; iRow < r.Alpha; iRow++ {
+			r.ppIndexArrayP[iRow+c*r.Alpha] = make([]int,2*(r.DataShards+r.KDivR))
+			for iCol := 0; iCol < 2*(r.DataShards+r.KDivR); iCol++ {
+				r.ppIndexArrayP[iRow+c*r.Alpha][iCol] = nums[t]
+				t++
+			}
+		}
+	}
+
+	r.ppCoefficients = make([][]byte, r.ParityShards*r.Alpha)
+	for c := 0; c < r.ParityShards; c++ {
+		for iRow := 0; iRow < r.Alpha; iRow++ {
+			r.ppCoefficients[iRow+c*r.Alpha] = make([]byte,r.DataShards+r.KDivR)
+			for iCol := 0; iCol < r.DataShards+r.KDivR; iCol++ {
+				r.ppCoefficients[iRow+c*r.Alpha][iCol] = byte(nums[t])
+				t++
+			}
+		}
+	}
+
+	r.ppPartitions = make([][]int, r.KDivR)
+	for iRow := 0; iRow < r.KDivR; iRow++ {
+		r.ppPartitions[iRow] = make([]int,r.Alpha)
+		for iCol := 0; iCol < r.Alpha; iCol++ {
+			r.ppPartitions[iRow][iCol] = nums[t]
+			t++
+		}
+	}
+	return nil
+}
 // New creates a new encoder and initializes it to
 // the number of data shards and parity shards that
 // you want to use. You can reuse this encoder.
@@ -182,37 +218,8 @@ func NewHashTagCode(dataShards, parityShards int) (HashTagCodec, error) {
 	if err != nil { panic(err) }
 	fmt.Println(len(nums))
 
-	r.ppIndexArrayP = make([][]int, r.ParityShards*r.Alpha)
-
-	t:=0
-	for c := 0; c < r.ParityShards; c++ {
-		for iRow := 0; iRow < r.Alpha; iRow++ {
-			r.ppIndexArrayP[iRow+c*r.Alpha] = make([]int,2*(r.DataShards+r.KDivR))
-			for iCol := 0; iCol < 2*(r.DataShards+r.KDivR); iCol++ {
-				r.ppIndexArrayP[iRow+c*r.Alpha][iCol] = nums[t]
-				t++
-			}
-		}
-	}
-
-	r.ppCoefficients = make([][]byte, r.ParityShards*r.Alpha)
-	for c := 0; c < r.ParityShards; c++ {
-		for iRow := 0; iRow < r.Alpha; iRow++ {
-			r.ppCoefficients[iRow+c*r.Alpha] = make([]byte,r.DataShards+r.KDivR)
-			for iCol := 0; iCol < r.DataShards+r.KDivR; iCol++ {
-				r.ppCoefficients[iRow+c*r.Alpha][iCol] = byte(nums[t])
-				t++
-			}
-		}
-	}
-
-	r.ppPartitions = make([][]int, r.KDivR)
-	for iRow := 0; iRow < r.KDivR; iRow++ {
-		r.ppPartitions[iRow] = make([]int,r.Alpha)
-		for iCol := 0; iCol < r.Alpha; iCol++ {
-			r.ppPartitions[iRow][iCol] = nums[t]
-			t++
-		}
+	if err:= r.parseHashTagSpec(nums);err!=nil{
+		return nil,errors.New(fmt.Sprintf("parsing " + filePath + " failed"))
 	}
 	// memory for repair
 	//r.FailedNodeID = -1
