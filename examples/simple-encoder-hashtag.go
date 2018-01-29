@@ -95,34 +95,13 @@ func main() {
 	err = encH.Encode(shards)
 	checkErr(err)
 
-	// Create encoding matrix.
-	/*enc, err := reedsolomon.New(*dataShards, *parShards)
-	checkErr(err)
-
-	fmt.Println("Opening", fname)
-	b, err := ioutil.ReadFile(fname)
-	checkErr(err)
-
-	// Split the file into equally sized shards.
-	shards, err := enc.Split(b)
-	checkErr(err)
-	fmt.Printf("File split into %d data+parity shards with %d bytes/shard.\n", len(shards), len(shards[0]))
-
-	// Encode parity
-	err = enc.Encode(shards)
-	checkErr(err)*/
-
 	// Write out the resulting files.
 	dir, file := filepath.Split(fname)
 	if *outDir != "" {
 		dir = *outDir
 	}
-	for i := 0; i<*dataShards+*parShards; i++ /*i, shard := range shards*/ {
-		outfn := fmt.Sprintf("%s.%d", file, i)
-
-		fmt.Println("Writing to", outfn)
-		err = reedsolomon.WriteSubshardsIntoFile(filepath.Join(dir, outfn), shards[i*alpha:(i+1)*alpha], alpha, os.ModePerm)
-		//err = ioutil.WriteFile(filepath.Join(dir, outfn), shard, os.ModePerm)
+	for i := 0; i<*dataShards+*parShards; i++ {
+		err = reedsolomon.WriteShard(filepath.Join(dir,file), i, shards[i*alpha:(i+1)*alpha])
 		checkErr(err)
 	}
 }

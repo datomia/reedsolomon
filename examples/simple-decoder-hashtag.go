@@ -69,46 +69,30 @@ func main() {
 	// Detect storage node failures
 	pIfFailedSN := make([]bool,*dataShards+*parShards)
 	numOfFailedNodes := 0
+	shardSize := int64(0)
 	for i := 0; i<*dataShards+*parShards; i++ {
 		infn := fmt.Sprintf("%s.%d", fname, i)
 		// check whether file exists or not
-		if _, err := os.Stat(infn); os.IsNotExist(err) {
+		if fi, err := os.Stat(infn); os.IsNotExist(err) {
 			fmt.Println("Failure of %d-th storage node has been detected.\n", i)
 			pIfFailedSN[i] = true
 			numOfFailedNodes++
+		} else {
+			shardSize = fi.Size()
 		}
 	}
 
 	// Create HashTagCodec
-	subshardSize := 3005 // some value for the parameter (corresponds to encoding)
 	encH, err := reedsolomon.NewHashTagCode(*dataShards, *parShards)
 	checkErr(err)
 
 	alpha:=encH.GetNumOfSubchunksInChunk()
+	subshardSize := shardSize/int64(alpha)
 
 	shards := make([][]byte, (*dataShards+*parShards)*alpha)
 
 	err = encH.Repair(fname, pIfFailedSN, subshardSize, shards)
 	checkErr(err)
-
-	// Verify the shards
-	/*ok, err := enc.Verify(shards)
-	if ok {
-		fmt.Println("No reconstruction needed")
-	} else {
-		fmt.Println("Verification failed. Reconstructing data")
-		err = enc.Reconstruct(shards)
-		if err != nil {
-			fmt.Println("Reconstruct failed -", err)
-			os.Exit(1)
-		}
-		ok, err = enc.Verify(shards)
-		if !ok {
-			fmt.Println("Verification failed after reconstruction, data likely corrupted.")
-			os.Exit(1)
-		}
-		checkErr(err)
-	}*/
 
 	// reconstruct file
 	// read data from k non-failed storage nodes
@@ -129,6 +113,8 @@ func main() {
 
 	// We don't know the exact filesize.
 	err = encH.Join(f, shards, len(shards[0])*(*dataShards*alpha))
+	checkErr(err)
+	err = f.Close()
 	checkErr(err)
 }
 

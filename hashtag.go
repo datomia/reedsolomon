@@ -46,8 +46,8 @@ type HashTagCodec interface {
 	//
 	// The reconstructed shard set is complete, but integrity is not verified.
 	// Use the Verify function to check if data set is ok.
-	Repair(fname string, pIfFailedSN []bool, subshardSize int, shards [][]byte) error
-	Reconstruct(fname string, subshardSize int, shards [][]byte) error
+	Repair(fname string, pIfFailedSN []bool, subshardSize int64, shards [][]byte) error
+	Reconstruct(fname string, subshardSize int64, shards [][]byte) error
 //	Reconstruct(shards [][]byte, idxs ...int) error
 
 	// Split a data slice into the number of subshards given to the encoder,
@@ -244,11 +244,13 @@ func (r HashTag) Encode(subshards [][]byte) error {
 		return err
 	}
 
-	// Get the slice of output buffers.
-	output := subshards[r.DataShards*r.Alpha:]
-
-	// Do the coding.
-	r.codeSomeShards(r.ppIndexArrayP,r.ppCoefficients, subshards[0:r.DataShards*r.Alpha], output, r.ParityShards, len(subshards[0]))
+	// Do the coding
+	for i:=r.DataShards;i<r.Shards;i++ {
+		// Get the slice of output buffers.
+		outputShard := subshards[i*r.Alpha:(i+1)*r.Alpha]
+		r.ComputeParityShard(subshards[0:r.DataShards*r.Alpha], outputShard, i-r.DataShards)
+	}
+	//r.codeSomeShards(r.ppIndexArrayP,r.ppCoefficients, subshards[0:r.DataShards*r.Alpha], output, r.ParityShards, len(subshards[0]))
 	return nil
 }
 
@@ -261,37 +263,62 @@ func (r HashTag) Encode(subshards [][]byte) error {
 // The number of outputs computed, and the
 // number of matrix rows used, is determined by
 // outputCount, which is the number of outputs to compute.
-func (r HashTag) codeSomeShards(ppIndexArrayP [][]int, ppCoefficients, inputs, outputs [][]byte, outputCount, byteCount int) {
-	/*if runtime.GOMAXPROCS(0) > 1 && len(inputs[0]) > minSplitSize {
-		r.codeSomeShardsP(matrixRows, inputs, outputs, outputCount, byteCount)
-		return
-	}*/
+/*func (r HashTag) codeSomeShards(ppIndexArrayP [][]int, ppCoefficients, inputs, outputs [][]byte, outputCount, byteCount int) {
 	// Encoding for first k columns of array ppIndexArrayP
 	for shardID := 0; shardID < r.DataShards; shardID++ {
 		for subshardID := 0;subshardID < r.Alpha; subshardID++ {
 			in := inputs[shardID*r.Alpha+subshardID]
-			for iRow := 0; iRow < outputCount; iRow++ {
+			for parityID := 0; parityID < outputCount; parityID++ {
 				if shardID == 0 {
-					galMulSlice(ppCoefficients[iRow*r.Alpha+subshardID][shardID], in, outputs[iRow*r.Alpha+subshardID])
+					galMulSlice(ppCoefficients[parityID*r.Alpha+subshardID][shardID], in, outputs[parityID*r.Alpha+subshardID])
 				} else {
-					galMulSliceXor(ppCoefficients[iRow*r.Alpha+subshardID][shardID], in, outputs[iRow*r.Alpha+subshardID])
+					galMulSliceXor(ppCoefficients[parityID*r.Alpha+subshardID][shardID], in, outputs[parityID*r.Alpha+subshardID])
 				}
 			}
 		}
 	}
 	// Encoding for k_div_r last columns of array ppIndexArrayP
-	for iRow := 0; iRow < outputCount; iRow++ {
+	for parityID := 0; parityID < outputCount; parityID++ {
 		for ci := 0;ci < r.Alpha; ci++ {
 			for i := 0;i < r.k_div_r; i++ {
-				subshardID := ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)]
-				shardID := ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)+1]
-				//fmt.Printf("iRow=%d ci=%d i=%d subshardID=%d shardID=%d\n",iRow,ci,i,subshardID,shardID)
-				if ppCoefficients[iRow*r.Alpha+ci][r.DataShards+i] == 0 {
+				subshardID := ppIndexArrayP[parityID*r.Alpha+ci][2*(r.DataShards+i)]
+				shardID := ppIndexArrayP[parityID*r.Alpha+ci][2*(r.DataShards+i)+1]
+				if ppCoefficients[parityID*r.Alpha+ci][r.DataShards+i] == 0 {
 					continue
 				}
 				in := inputs[shardID*r.Alpha+subshardID]
-				galMulSliceXor(ppCoefficients[iRow*r.Alpha+ci][r.DataShards+i], in, outputs[iRow*r.Alpha+ci])
+				galMulSliceXor(ppCoefficients[parityID*r.Alpha+ci][r.DataShards+i], in, outputs[parityID*r.Alpha+ci])
 			}
+		}
+	}
+}*/
+
+func (r HashTag) ComputeParityShard(inputs, outputShard [][]byte, parityID int) {
+	/*if runtime.GOMAXPROCS(0) > 1 && len(inputs[0]) > minSplitSize {
+		r.codeSomeShardsP(matrixRows, inputs, outputs, outputCount, byteCount)
+		return
+	}*/
+	// Encoding for first k columns of array ppIndexArrayP
+	for payloadID := 0; payloadID < r.DataShards; payloadID++ {
+		for subID := 0;subID < r.Alpha; subID++ {
+			in := inputs[payloadID*r.Alpha+subID]
+			if payloadID == 0 {
+				galMulSlice(r.ppCoefficients[parityID*r.Alpha+subID][payloadID], in, outputShard[subID])
+			} else {
+				galMulSliceXor(r.ppCoefficients[parityID*r.Alpha+subID][payloadID], in, outputShard[subID])
+			}
+		}
+	}
+	// Encoding for k_div_r last columns of array ppIndexArrayP
+	for paritySubID := 0;paritySubID < r.Alpha; paritySubID++ {
+		for i := 0;i < r.k_div_r; i++ {
+			subshardID := r.ppIndexArrayP[parityID*r.Alpha+paritySubID][2*(r.DataShards+i)]
+			shardID := r.ppIndexArrayP[parityID*r.Alpha+paritySubID][2*(r.DataShards+i)+1]
+			if r.ppCoefficients[parityID*r.Alpha+paritySubID][r.DataShards+i] == 0 {
+				continue
+			}
+			in := inputs[shardID*r.Alpha+subshardID]
+			galMulSliceXor(r.ppCoefficients[parityID*r.Alpha+paritySubID][r.DataShards+i], in, outputShard[paritySubID])
 		}
 	}
 }
@@ -370,17 +397,24 @@ func (r HashTag) Join(dst io.Writer, shards [][]byte, outSize int) error {
 // WriteFile writes data to a file named by filename.
 // If the file does not exist, WriteFile creates it with permissions perm;
 // otherwise WriteFile truncates it before writing.
-func WriteSubshardsIntoFile(filename string, data [][]byte, alpha int, perm os.FileMode) error {
+func WriteSubshardsIntoFile(filename string, data [][]byte, perm os.FileMode) error {
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
-	for i:=0; i<alpha; i++ {
+	for i:=0; i<len(data); i++ {
 		f.Write(data[i])
 	}
 	if err1 := f.Close(); err == nil {
 		err = err1
 	}
+	return err
+}
+
+func WriteShard(fname string, nodeID int, shard [][]byte) error {
+	outfn := fmt.Sprintf("%s.%d", fname, nodeID)
+	fmt.Println("Writing to ", outfn)
+	err := WriteSubshardsIntoFile(outfn,shard,os.ModePerm)
 	return err
 }
 

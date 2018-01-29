@@ -196,7 +196,7 @@ func ElementsToRead(n, alpha, numOfExpr int,
 	return pToRead
 }
 
-func (r HashTag) Repair(fname string, pIfFailedSN []bool, subshardSize int, shards [][]byte) error {
+func (r HashTag) Repair(fname string, pIfFailedSN []bool, subshardSize int64, shards [][]byte) error {
 	numOfFailures :=0
 	failedNodeID:=0
 	// compute number of failed storage nodes and store identifier of the last failed node
@@ -217,7 +217,17 @@ func (r HashTag) Repair(fname string, pIfFailedSN []bool, subshardSize int, shar
 			err := r.RepairSystematicStorageNode(fname, failedNodeID, subshardSize, shards)
 			return err
 		} else {
-			return errors.New("Repair for failure of parity storage nodes is not implemented.")
+			for i:=0;i<r.Shards*r.Alpha;i++ {
+				shards[i] = make([]byte, subshardSize)
+			}
+			// read payload data
+			decodingIsNeeded, _, _, err := r.ReadShards(fname, subshardSize, shards)
+			if err != nil { return err }
+			if decodingIsNeeded { return errors.New("Failed to read payload data for repair of parity storage node")}
+			r.ComputeParityShard(shards[0:r.DataShards*r.Alpha], shards[failedNodeID*r.Alpha:(failedNodeID+1)*r.Alpha], failedNodeID-r.DataShards)
+			// write reconstructed parity chunk
+			err = WriteShard(fname, failedNodeID, shards[failedNodeID*r.Alpha:(failedNodeID+1)*r.Alpha])
+			return nil //errors.New("Repair for failure of parity storage nodes is not implemented.")
 		}
 	default:
 		if numOfFailures > r.ParityShards {
@@ -260,7 +270,7 @@ func (r *HashTag) ComputeAccordingExpressions(numOfExpr int, ppValues [][]byte) 
 }
 
 /* Reconstruct data stored on failed storage nodes. */
-func (r HashTag) RepairSystematicStorageNode(fname string, failedNodeID, subshardSize int, shards [][]byte) error {
+func (r HashTag) RepairSystematicStorageNode(fname string, failedNodeID int, subshardSize int64, shards [][]byte) error {
 	// construct expressions for data reconstruction
 
 	// construct expressions for repair
@@ -275,11 +285,6 @@ func (r HashTag) RepairSystematicStorageNode(fname string, failedNodeID, subshar
 		r.Alpha, numOfExpr,
 		r.pExpressionLength, r.ppExpressionElements)
 
-	if err != nil {
-		return err
-	}
-
-	//shards := make([][]byte, r.Shards*r.Alpha)
 	for i:=0;i<r.Shards*r.Alpha;i++ {
 		shards[i] = make([]byte, subshardSize)
 	}
@@ -302,9 +307,9 @@ func (r HashTag) RepairSystematicStorageNode(fname string, failedNodeID, subshar
 				continue
 			}
 			// whence: 0 means relative to the origin of the file, 1 means relative to the current offset, and 2 means relative to the end
-			_, err := f.Seek(int64(j*subshardSize), 0)
+			_, err := f.Seek(int64(j)*subshardSize, 0)
 			if err != nil {
-				return errors.New(fmt.Sprintf("Error seeking position %d in file %s",j*subshardSize,infn))
+				return errors.New(fmt.Sprintf("Error seeking position %d in file %s",int64(j)*subshardSize,infn))
 			}
 			fmt.Printf("Reading %d-th subchunk\n",j)
 			_, err = f.Read(shards[i*r.Alpha+j])
@@ -336,10 +341,7 @@ func (r HashTag) RepairSystematicStorageNode(fname string, failedNodeID, subshar
 	r.ComputeAccordingExpressions(numOfExpr, shards)
 
 	// write reconstructed subshards to new file
-	outfn := fmt.Sprintf("%s.%d", fname, failedNodeID)
-	fmt.Println("Writing to ", outfn)
-	err = WriteSubshardsIntoFile(outfn, shards[failedNodeID*r.Alpha:(failedNodeID+1)*r.Alpha],
-		r.Alpha, os.ModePerm)
+	err = WriteShard(fname, failedNodeID, shards[failedNodeID*r.Alpha:(failedNodeID+1)*r.Alpha])
 	return err
 }
 
