@@ -92,7 +92,7 @@ func (r HashTag) ExpressionsForRepairSingleSystematicNode(failedNodeID int) (int
 	elementID := failedNodeID%r.ParityShards
 	portion := int((r.Alpha + r.ParityShards - 1) / r.ParityShards)
 	pSubset := r.ppPartitions[nu][elementID*portion:]
-	maxExprLength := 2 * (r.DataShards + r.k_div_r + 1)
+	maxExprLength := 2 * (r.DataShards + r.KDivR + 1)
 	/*Line 2.
 	Operations to repair a_{i,j}, where i\in D_{rho,d_l}.
 	List of elements to be computed.
@@ -134,7 +134,7 @@ func (r HashTag) ExpressionsForRepairSingleSystematicNode(failedNodeID int) (int
 			// Check this for each expression. Save unknown element.
 			unknownNum := 0
 			unknownVarExprPos := 0
-			for t := r.DataShards; t < r.DataShards + r.k_div_r; t++ {
+			for t := r.DataShards; t < r.DataShards + r.KDivR; t++ {
 			// we start from k, since all previous elements are assumed to be already computed
 				if r.ppIndexArrayP[i*r.Alpha + pSubset[j]][2 * t + 1] != failedNodeID {
 					continue
@@ -150,7 +150,7 @@ func (r HashTag) ExpressionsForRepairSingleSystematicNode(failedNodeID int) (int
 			}
 			unknownVarRow := r.ppIndexArrayP[i*r.Alpha + pSubset[j]][2 * unknownVarExprPos]
 			r.pExpressionLength[numOfExpr] = r.GenExpression(unknownVarExprPos, r.DataShards+i, pSubset[j],
-			r.DataShards + r.k_div_r, r.ppIndexArrayP[i*r.Alpha + pSubset[j]], r.ppCoefficients[i*r.Alpha + pSubset[j]],
+			r.DataShards + r.KDivR, r.ppIndexArrayP[i*r.Alpha + pSubset[j]], r.ppCoefficients[i*r.Alpha + pSubset[j]],
 				r.ppExpressionElements[numOfExpr], r.ppExpressionCoefficients[numOfExpr]);
 			if (r.pExpressionLength[numOfExpr] > maxExprLength) {
 				return 0,errors.New("Error: m_maxExprLength is too low.")

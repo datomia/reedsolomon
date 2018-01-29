@@ -80,7 +80,7 @@ type HashTag struct {
 	ParityShards int // Number of parity shards, should not be modified.
 	Shards       int // Total number of shards. Calculated, and should not be modified.
 	Alpha        int
-	k_div_r      int
+	KDivR        int
 	ppIndexArrayP             [][]int
 	ppCoefficients            [][]byte
 	ppPartitions              [][]int
@@ -113,7 +113,15 @@ func (r HashTag) readHashTagSpec(filePath string) (nums []int, err error) {
 
 	lines := strings.Split(string(b), "\n")
 
-	numOfIntElements:=r.ParityShards*r.Alpha*(r.DataShards+r.k_div_r)*3+r.k_div_r*r.Alpha
+	// Each code specification contains description of parity chunk computation and partitions.
+	// Each parity chunk is specified by two matrices: index matrix and coefficient matrix,
+	// where index matrix contains 2*r.Alpha*(r.DataShards+r.KDivR) integers
+	// and coefficient matrix contains r.Alpha*(r.DataShards+r.KDivR) integers,
+	// since each parity chunk depends on at most r.Alpha*(r.DataShards+r.KDivR) payload subchunks.
+	// Specification contains r.KDivR partitions,
+	// where each partition is given by r.Alpha integers.
+	// The total number of integers in code specification is equal to numOfIntElements.
+	numOfIntElements:=r.ParityShards*r.Alpha*(r.DataShards+r.KDivR)*3+r.KDivR*r.Alpha
 	// Assign cap to avoid resize on every append.
 	nums = make([]int, 0, numOfIntElements)
 	j:=0
@@ -163,7 +171,7 @@ func NewHashTagCode(dataShards, parityShards int) (HashTagCodec, error) {
 		return nil, errors.New("HashTag code with required parameters does not exist")
 	}
 	extension := 8
-	r.k_div_r = int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
+	r.KDivR = int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
 
 	//if dataShards+parityShards > 255 {
 	//	return nil, ErrMaxShardNum
@@ -179,8 +187,8 @@ func NewHashTagCode(dataShards, parityShards int) (HashTagCodec, error) {
 	t:=0
 	for c := 0; c < r.ParityShards; c++ {
 		for iRow := 0; iRow < r.Alpha; iRow++ {
-			r.ppIndexArrayP[iRow+c*r.Alpha] = make([]int,2*(r.DataShards+r.k_div_r))
-			for iCol := 0; iCol < 2*(r.DataShards+r.k_div_r); iCol++ {
+			r.ppIndexArrayP[iRow+c*r.Alpha] = make([]int,2*(r.DataShards+r.KDivR))
+			for iCol := 0; iCol < 2*(r.DataShards+r.KDivR); iCol++ {
 				r.ppIndexArrayP[iRow+c*r.Alpha][iCol] = nums[t]
 				t++
 			}
@@ -190,16 +198,16 @@ func NewHashTagCode(dataShards, parityShards int) (HashTagCodec, error) {
 	r.ppCoefficients = make([][]byte, r.ParityShards*r.Alpha)
 	for c := 0; c < r.ParityShards; c++ {
 		for iRow := 0; iRow < r.Alpha; iRow++ {
-			r.ppCoefficients[iRow+c*r.Alpha] = make([]byte,r.DataShards+r.k_div_r)
-			for iCol := 0; iCol < r.DataShards+r.k_div_r; iCol++ {
+			r.ppCoefficients[iRow+c*r.Alpha] = make([]byte,r.DataShards+r.KDivR)
+			for iCol := 0; iCol < r.DataShards+r.KDivR; iCol++ {
 				r.ppCoefficients[iRow+c*r.Alpha][iCol] = byte(nums[t])
 				t++
 			}
 		}
 	}
 
-	r.ppPartitions = make([][]int, r.k_div_r)
-	for iRow := 0; iRow < r.k_div_r; iRow++ {
+	r.ppPartitions = make([][]int, r.KDivR)
+	for iRow := 0; iRow < r.KDivR; iRow++ {
 		r.ppPartitions[iRow] = make([]int,r.Alpha)
 		for iCol := 0; iCol < r.Alpha; iCol++ {
 			r.ppPartitions[iRow][iCol] = nums[t]
@@ -209,7 +217,7 @@ func NewHashTagCode(dataShards, parityShards int) (HashTagCodec, error) {
 	// memory for repair
 	//r.FailedNodeID = -1
 	//r.NumOfExpr = 0
-	maxExprLength := 2 * (r.DataShards + r.k_div_r + 1)
+	maxExprLength := 2 * (r.DataShards + r.KDivR + 1)
 	maxExprNum := r.ParityShards*r.Alpha
 	r.ppExpressionElements = make([][]int,maxExprNum)
 	for i := 0; i < maxExprNum; i++ {
@@ -277,10 +285,10 @@ func (r HashTag) Encode(subshards [][]byte) error {
 			}
 		}
 	}
-	// Encoding for k_div_r last columns of array ppIndexArrayP
+	// Encoding for KDivR last columns of array ppIndexArrayP
 	for parityID := 0; parityID < outputCount; parityID++ {
 		for ci := 0;ci < r.Alpha; ci++ {
-			for i := 0;i < r.k_div_r; i++ {
+			for i := 0;i < r.KDivR; i++ {
 				subshardID := ppIndexArrayP[parityID*r.Alpha+ci][2*(r.DataShards+i)]
 				shardID := ppIndexArrayP[parityID*r.Alpha+ci][2*(r.DataShards+i)+1]
 				if ppCoefficients[parityID*r.Alpha+ci][r.DataShards+i] == 0 {
@@ -309,9 +317,9 @@ func (r HashTag) ComputeParityShard(inputs, outputShard [][]byte, parityID int) 
 			}
 		}
 	}
-	// Encoding for k_div_r last columns of array ppIndexArrayP
+	// Encoding for KDivR last columns of array ppIndexArrayP
 	for paritySubID := 0;paritySubID < r.Alpha; paritySubID++ {
-		for i := 0;i < r.k_div_r; i++ {
+		for i := 0;i < r.KDivR; i++ {
 			subshardID := r.ppIndexArrayP[parityID*r.Alpha+paritySubID][2*(r.DataShards+i)]
 			shardID := r.ppIndexArrayP[parityID*r.Alpha+paritySubID][2*(r.DataShards+i)+1]
 			if r.ppCoefficients[parityID*r.Alpha+paritySubID][r.DataShards+i] == 0 {
