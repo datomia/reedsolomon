@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"io/ioutil"
 	"io"
+	"errors"
 )
 
 // Encoder is an interface to encode HashTagCode parity sets for your data.
@@ -70,6 +71,7 @@ type HashTagCodec interface {
 	// If there are to few shards given, ErrTooFewShards will be returned.
 	// If the total data size is less than outSize, ErrShortData will be returned.
 	Join(dst io.Writer, shards [][]byte, outSize int) error
+	GetNumOfSubchunksInChunk() int
 }
 
 // HashTag contains a matrices of indices and coefficients.
@@ -88,6 +90,10 @@ type HashTag struct {
 	pExpressionLength         []int
 	ppExpressionElements      [][]int
 	ppExpressionCoefficients  [][]byte
+}
+
+func (r HashTag) GetNumOfSubchunksInChunk() int {
+	return r.Alpha
 }
 
 // ErrInvShardNum will be returned by New, if you attempt to create
@@ -117,7 +123,7 @@ func (r HashTag) readHashTagSpec(filePath string) (nums []int, err error) {
 		for _,a := range li {
 			if len(a) == 0 { continue }
 			if a == "\r" {
-				//fmt.Fprint(os.Stdout,"\n")
+				fmt.Fprint(os.Stdout,"\n")
 				break
 			}
 			w, err := strconv.Atoi(a)
@@ -126,7 +132,7 @@ func (r HashTag) readHashTagSpec(filePath string) (nums []int, err error) {
 				return nil, err
 			}
 			nums = append(nums, w)
-			//fmt.Fprint(os.Stdout,w," ")
+			fmt.Fprint(os.Stdout,w," ")
 		}
 		if j==numOfIntElements { break }
 	}
@@ -137,19 +143,27 @@ func (r HashTag) readHashTagSpec(filePath string) (nums []int, err error) {
 // New creates a new encoder and initializes it to
 // the number of data shards and parity shards that
 // you want to use. You can reuse this encoder.
-func NewHashTagCode(dataShards, parityShards, alpha int) (HashTagCodec, error) {
+func NewHashTagCode(dataShards, parityShards int) (HashTagCodec, error) {
 	r := HashTag{
 		DataShards:   dataShards,
 		ParityShards: parityShards,
 		Shards:       dataShards + parityShards,
-		Alpha:        alpha,
 	}
-	extension := 8
-	r.k_div_r = int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
-
 	if dataShards <= 0 || parityShards <= 0 {
 		return nil, ErrInvShardNum
 	}
+	r.Alpha = 0
+	for i:= range ParametersHashTag {
+		if (ParametersHashTag[i][0]==uint16(r.Shards)) && (ParametersHashTag[i][1]==uint16(r.ParityShards)) {
+			r.Alpha = int(ParametersHashTag[i][2])
+			break
+		}
+	}
+	if r.Alpha == 0 {
+		return nil, errors.New("HashTag code with required parameters does not exist")
+	}
+	extension := 8
+	r.k_div_r = int((r.DataShards + r.ParityShards - 1) / r.ParityShards)
 
 	//if dataShards+parityShards > 255 {
 	//	return nil, ErrMaxShardNum
@@ -271,6 +285,10 @@ func (r HashTag) codeSomeShards(ppIndexArrayP [][]int, ppCoefficients, inputs, o
 			for i := 0;i < r.k_div_r; i++ {
 				subshardID := ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)]
 				shardID := ppIndexArrayP[iRow*r.Alpha+ci][2*(r.DataShards+i)+1]
+				//fmt.Printf("iRow=%d ci=%d i=%d subshardID=%d shardID=%d\n",iRow,ci,i,subshardID,shardID)
+				if ppCoefficients[iRow*r.Alpha+ci][r.DataShards+i] == 0 {
+					continue
+				}
 				in := inputs[shardID*r.Alpha+subshardID]
 				galMulSliceXor(ppCoefficients[iRow*r.Alpha+ci][r.DataShards+i], in, outputs[iRow*r.Alpha+ci])
 			}
@@ -365,6 +383,50 @@ func WriteSubshardsIntoFile(filename string, data [][]byte, alpha int, perm os.F
 	}
 	return err
 }
+
+var ParametersHashTag = [41][4]uint16{
+	[4]uint16{ 4, 2,  4, 8},
+	[4]uint16{ 5, 2,  4, 8},
+	[4]uint16{ 6, 2,  4, 8},
+	[4]uint16{ 7, 2,  8, 8},
+	[4]uint16{ 8, 2,  8, 8},
+	[4]uint16{ 9, 2,  8, 8},
+	[4]uint16{10, 2,  8, 8},
+	[4]uint16{11, 2,  8, 8},
+	[4]uint16{12, 2,  8, 8},
+	[4]uint16{13, 2,  8, 8},
+	[4]uint16{14, 2,  8, 8},
+	[4]uint16{15, 2,  8, 8},
+	[4]uint16{16, 2,  8, 8},
+	[4]uint16{17, 2,  8, 8},
+	[4]uint16{18, 2,  8, 8},
+	[4]uint16{ 6, 3,  9, 8},
+	[4]uint16{ 7, 3,  9, 8},
+	[4]uint16{ 8, 3,  9, 8},
+	[4]uint16{ 9, 3,  9, 8},
+	[4]uint16{10, 3,  9, 8},
+	[4]uint16{11, 3,  9, 8},
+	[4]uint16{12, 3,  9, 8},
+	[4]uint16{13, 3,  9, 8},
+	[4]uint16{14, 3,  9, 8},
+	[4]uint16{15, 3,  9, 8},
+	[4]uint16{16, 3,  9, 8},
+	[4]uint16{17, 3,  9, 8},
+	[4]uint16{18, 3,  9, 8},
+	[4]uint16{ 8, 4, 16, 8},
+	[4]uint16{ 9, 4, 16, 8},
+	[4]uint16{10, 4, 16, 8},
+	[4]uint16{11, 4, 16, 8},
+	[4]uint16{12, 4, 16, 8},
+	[4]uint16{13, 4, 16, 8},
+	[4]uint16{14, 4, 16, 8},
+	[4]uint16{15, 4, 16, 8},
+	[4]uint16{16, 4, 16, 8},
+	[4]uint16{10, 5, 10, 8},
+	[4]uint16{11, 5, 10, 8},
+	[4]uint16{12, 5, 10, 8},
+	[4]uint16{13, 5, 10, 8}}
+
 
 
 

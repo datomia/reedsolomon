@@ -44,7 +44,7 @@ import (
 	"reedsolomon.git/trunk"
 )
 
-var dataShards = flag.Int("data", 4, "Number of shards to split the data into, must be below 257.")
+var dataShards = flag.Int("data", 5, "Number of shards to split the data into, must be below 257.")
 var parShards = flag.Int("par", 2, "Number of parity shards")
 var outDir = flag.String("out", "", "Alternative output directory")
 
@@ -80,8 +80,9 @@ func main() {
 	}*/
 
 	// Create HashTagCodec
-	alpha := 4 // some value for the parameter
-	encH, err := reedsolomon.NewHashTagCode(*dataShards, *parShards, alpha)
+	encH, err := reedsolomon.NewHashTagCode(*dataShards, *parShards)
+	checkErr(err)
+	alpha:=encH.GetNumOfSubchunksInChunk()
 
 	fmt.Println("Opening", fname)
 	b, err := ioutil.ReadFile(fname)
