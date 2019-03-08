@@ -466,8 +466,8 @@ func (r reedSolomon) codeSomeShardsP(matrixRows, inputs, outputs [][]byte, outpu
 	if do < r.o.minSplitSize {
 		do = r.o.minSplitSize
 	}
-	// Make sizes divisible by 16
-	do = (do + 15) & (^15)
+	// Make sizes divisible by 32
+	do = (do + 31) & (^31)
 	start := 0
 	for start < byteCount {
 		if start+do > byteCount {
@@ -527,8 +527,8 @@ func (r reedSolomon) checkSomeShardsP(matrixRows, inputs, toCheck [][]byte, outp
 	if do < r.o.minSplitSize {
 		do = r.o.minSplitSize
 	}
-	// Make sizes divisible by 16
-	do = (do + 15) & (^15)
+	// Make sizes divisible by 32
+	do = (do + 31) & (^31)
 	start := 0
 	for start < byteCount {
 		if start+do > byteCount {
