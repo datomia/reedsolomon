@@ -367,18 +367,6 @@ func testReconstruct(t *testing.T, o ...Option) {
 	}
 }
 
-<<<<<<< HEAD
-func TestReconstructWithIndexes(t *testing.T) {
-	perShard := 50000
-	dataShards := 10
-	parityShards := 4
-	totalShards := dataShards + parityShards
-	r, err := New(dataShards, parityShards)
-	if err != nil {
-		t.Fatal(err)
-	}
-	shards := make([][]byte, totalShards)
-=======
 func TestReconstructData(t *testing.T) {
 	testReconstructData(t)
 	for i, o := range testOpts() {
@@ -395,17 +383,12 @@ func testReconstructData(t *testing.T, o ...Option) {
 		t.Fatal(err)
 	}
 	shards := make([][]byte, 13)
->>>>>>> Add ReconstructData interface method (#57)
 	for s := range shards {
 		shards[s] = make([]byte, perShard)
 	}
 
 	rand.Seed(0)
-<<<<<<< HEAD
-	for s := 0; s < totalShards; s++ {
-=======
 	for s := 0; s < 13; s++ {
->>>>>>> Add ReconstructData interface method (#57)
 		fillRandom(shards[s])
 	}
 
@@ -415,61 +398,23 @@ func testReconstructData(t *testing.T, o ...Option) {
 	}
 
 	// Reconstruct with all shards present
-<<<<<<< HEAD
-	err = r.Reconstruct(shards)
-=======
 	err = r.ReconstructData(shards)
->>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Reconstruct with 10 shards present. Use pre-allocated memory for one of them.
 	shards[0] = nil
-<<<<<<< HEAD
-	shards[7] = nil
-	shards[11] = nil
-
-	err = r.Reconstruct(shards, 0, 7, 11)
-=======
 	shards[2] = nil
 	shard4 := shards[4]
 	shards[4] = shard4[:0]
 	fillRandom(shard4)
 
 	err = r.ReconstructData(shards)
->>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-<<<<<<< HEAD
-	// Check that parity shards do not get reconstructed
-	shard0 := shards[0]
-	shard2 := shards[2]
-	shards[0] = nil
-	shards[2] = nil
-	shards[11] = nil
-	shards[12] = nil
-
-	err = r.Reconstruct(shards, 0, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if bytes.Compare(shard0, shards[0]) != 0 ||
-		bytes.Compare(shard2, shards[2]) != 0 {
-		t.Errorf("Shard content mismatch")
-	}
-
-	if shards[11] != nil ||
-		shards[12] != nil {
-		t.Errorf("unspecified shard reconstructed.")
-	}
-
-	// Reset all shards
-	err = r.Reconstruct(shards)
-=======
 	// Since all parity shards are available, verification will succeed
 	ok, err := r.Verify(shards)
 	if err != nil {
@@ -489,23 +434,10 @@ func testReconstructData(t *testing.T, o ...Option) {
 	shards[12] = nil
 
 	err = r.ReconstructData(shards)
->>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-<<<<<<< HEAD
-	// Check that only required parity shard is reconstructed.
-	shard0 = shards[0]
-	shard2 = shards[2]
-	shard12 := shards[12]
-	shards[0] = nil
-	shards[2] = nil
-	shards[11] = nil
-	shards[12] = nil
-
-	err = r.Reconstruct(shards, 0, 2, 12)
-=======
 	// Verification will fail now due to absence of a parity block
 	_, err = r.Verify(shards)
 	if err != ErrShardSize {
@@ -520,33 +452,10 @@ func testReconstructData(t *testing.T, o ...Option) {
 	shards[12] = nil
 
 	err = r.ReconstructData(shards)
->>>>>>> Add ReconstructData interface method (#57)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-<<<<<<< HEAD
-	if bytes.Compare(shard0, shards[0]) != 0 ||
-		bytes.Compare(shard2, shards[2]) != 0 ||
-		bytes.Compare(shard12, shards[12]) != 0 {
-		t.Errorf("Shard content mismatch")
-	}
-
-	if shards[11] != nil {
-		t.Errorf("unspecified shard reconstructed. shard11")
-	}
-
-	// Reset all shards
-	err = r.Reconstruct(shards)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Check out of range case
-	err = r.Reconstruct(shards, totalShards)
-	if err == nil {
-		t.Fatal("out of range case. Error expected")
-=======
 	_, err = r.Verify(shards)
 	if err != ErrShardSize {
 		t.Errorf("expected %v, got %v", ErrTooFewShards, err)
@@ -572,7 +481,6 @@ func testReconstructData(t *testing.T, o ...Option) {
 	err = r.ReconstructData(make([][]byte, 13))
 	if err != ErrShardNoData {
 		t.Errorf("expected %v, got %v", ErrShardNoData, err)
->>>>>>> Add ReconstructData interface method (#57)
 	}
 }
 

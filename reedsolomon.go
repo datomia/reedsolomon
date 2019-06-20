@@ -54,7 +54,7 @@ type Encoder interface {
 	//
 	// The reconstructed shard set is complete, but integrity is not verified.
 	// Use the Verify function to check if data set is ok.
-	Reconstruct(shards [][]byte, idxs ...int) error
+	Reconstruct(shards [][]byte) error
 
 	// ReconstructData will recreate any missing data shards, if possible.
 	//
@@ -626,13 +626,6 @@ func shardSize(shards [][]byte) int {
 //
 // The reconstructed shard set is complete, but integrity is not verified.
 // Use the Verify function to check if data set is ok.
-<<<<<<< HEAD
-func (r reedSolomon) Reconstruct(shards [][]byte, idxs ...int) error {
-	return r.reconstruct(shards, idxs...)
-}
-
-func (r reedSolomon) reconstruct(shards [][]byte, idxs ...int) error {
-=======
 func (r reedSolomon) Reconstruct(shards [][]byte) error {
 	return r.reconstruct(shards, false)
 }
@@ -656,16 +649,11 @@ func (r reedSolomon) ReconstructData(shards [][]byte) error {
 	return r.reconstruct(shards, true)
 }
 
-<<<<<<< HEAD
-func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool) error {
->>>>>>> Add ReconstructData interface method (#57)
-=======
 func (r reedSolomon) ReconstructSpecifyShards(shards [][]byte, idxs ...int) error {
 	return r.reconstruct(shards, false, idxs...)
 }
 
 func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) error {
->>>>>>> reconstruct specified atoms only (#1)
 	if len(shards) != r.Shards {
 		return ErrTooFewShards
 	}
@@ -687,17 +675,7 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 	// Quick check: are all of the shards present?  If so, there's
 	// nothing to do.
 	numberPresent := 0
-<<<<<<< HEAD
-<<<<<<< HEAD
 	requiredPresent := 0
-	for i := 0; i < r.Shards; i++ {
-		if len(shards[i]) != 0 {
-			if len(idxs) > 0 && contains(idxs, i) {
-				requiredPresent++
-=======
-=======
-	requiredPresent := 0
->>>>>>> reconstruct specified atoms only (#1)
 	dataPresent := 0
 	for i := 0; i < r.Shards; i++ {
 		if len(shards[i]) != 0 {
@@ -706,23 +684,12 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 			}
 			if i < r.DataShards {
 				dataPresent++
->>>>>>> Allow to skip parity reconstruction
 			}
 			numberPresent++
 		}
 	}
-<<<<<<< HEAD
-<<<<<<< HEAD
-	if numberPresent == r.Shards || (len(idxs) > 0 && len(idxs) == requiredPresent) {
-=======
-	if numberPresent == r.Shards || (dataOnly && dataPresent == r.DataShards) {
->>>>>>> Allow to skip parity reconstruction
-		// Cool.  All of the shards data data.  We don't
-		// need to do anything.
-=======
 
 	if numberPresent == r.Shards || (len(idxs) > 0 && len(idxs) == requiredPresent) || (dataOnly && dataPresent == r.DataShards) {
->>>>>>> reconstruct specified atoms only (#1)
 		return nil
 	}
 
@@ -731,15 +698,9 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 		return ErrTooFewShards
 	}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-	// Check if any of requested index is in parity range. In that case we will need to reconstruct all data shards.
-	var needAllData bool
-=======
 
 	// Check if any of requested index is in parity range. In that case we will need to reconstruct all data shards.
 	needAllData := len(idxs) == 0
->>>>>>> reconstruct specified atoms only (#1)
 	for _, idx := range idxs {
 		if idx >= r.DataShards {
 			needAllData = true
@@ -747,18 +708,7 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 		}
 	}
 
-<<<<<<< HEAD
-	// Pull out the rows of the matrix that correspond to the
-	// shards that we have and build a square matrix.  This
-	// matrix could be used to generate the shards that we have
-	// from the original data.
-	//
-	// Also, pull out an array holding just the shards that
-=======
-=======
->>>>>>> reconstruct specified atoms only (#1)
 	// Pull out an array holding just the shards that
->>>>>>> Add Inverse Matrix caching in a Thread-Safe Lookup Tree (#36)
 	// correspond to the rows of the submatrix.  These shards
 	// will be the input to the decoding process that re-creates
 	// the missing data shards.
@@ -829,38 +779,23 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 
 	for iShard := 0; iShard < r.DataShards; iShard++ {
 		if len(shards[iShard]) == 0 {
-<<<<<<< HEAD
-<<<<<<< HEAD
-			if !needAllData && len(idxs) > 0 && !contains(idxs, iShard) {
-				continue
-			}
-			shards[iShard] = make([]byte, shardSize)
-=======
-=======
 			if !needAllData && len(idxs) > 0 && !contains(idxs, iShard) {
 				continue
 			}
 
->>>>>>> reconstruct specified atoms only (#1)
 			if cap(shards[iShard]) >= shardSize {
 				shards[iShard] = shards[iShard][0:shardSize]
 			} else {
 				shards[iShard] = make([]byte, shardSize)
 			}
-<<<<<<< HEAD
->>>>>>> Allow reconstructing into pre-allocated memory. (#66)
-=======
 
 			shards[iShard] = make([]byte, shardSize)
->>>>>>> reconstruct specified atoms only (#1)
 			outputs[outputCount] = shards[iShard]
 			matrixRows[outputCount] = dataDecodeMatrix[iShard]
 			outputCount++
 		}
 	}
 	r.codeSomeShards(matrixRows, subShards, outputs[:outputCount], outputCount, shardSize)
-<<<<<<< HEAD
-=======
 
 
 	if dataOnly {
@@ -868,15 +803,8 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 		return nil
 	}
 
-<<<<<<< HEAD
->>>>>>> Add ReconstructData interface method (#57)
-=======
 
-<<<<<<< HEAD
->>>>>>> Allow to skip parity reconstruction
-=======
 
->>>>>>> reconstruct specified atoms only (#1)
 	// Now that we have all of the data shards intact, we can
 	// compute any of the parity that is missing.
 	//
@@ -886,30 +814,17 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 	outputCount = 0
 	for iShard := r.DataShards; iShard < r.Shards; iShard++ {
 		if len(shards[iShard]) == 0 {
-<<<<<<< HEAD
-<<<<<<< HEAD
-			if len(idxs) > 0 && !contains(idxs, iShard) {
-				continue
-			}
-			shards[iShard] = make([]byte, shardSize)
-=======
-=======
 			if len(idxs) > 0 && !contains(idxs, iShard) {
 				continue
 			}
 
->>>>>>> reconstruct specified atoms only (#1)
 			if cap(shards[iShard]) >= shardSize {
 				shards[iShard] = shards[iShard][0:shardSize]
 			} else {
 				shards[iShard] = make([]byte, shardSize)
 			}
-<<<<<<< HEAD
->>>>>>> Allow reconstructing into pre-allocated memory. (#66)
-=======
 
 			shards[iShard] = make([]byte, shardSize)
->>>>>>> reconstruct specified atoms only (#1)
 			outputs[outputCount] = shards[iShard]
 			matrixRows[outputCount] = r.parity[iShard-r.DataShards]
 			outputCount++
