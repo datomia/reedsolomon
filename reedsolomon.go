@@ -76,7 +76,6 @@ type Encoder interface {
 	// Reconstruct specify shards
 	ReconstructSpecifyShards(shards [][]byte, idx ...int) error
 
-
 	// Update parity is use for change a few data shards and update it's parity.
 	// Input 'newDatashards' containing data shards changed.
 	// Input 'shards' containing old data shards (if data shard not changed, it can be nil) and old parity shards.
@@ -698,7 +697,6 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 		return ErrTooFewShards
 	}
 
-
 	// Check if any of requested index is in parity range. In that case we will need to reconstruct all data shards.
 	needAllData := len(idxs) == 0
 	for _, idx := range idxs {
@@ -712,9 +710,6 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 	// correspond to the rows of the submatrix.  These shards
 	// will be the input to the decoding process that re-creates
 	// the missing data shards.
-	//
-	// Also, create an array of indices of the valid rows we do have
-	// and the invalid rows we don't have up until we have enough valid rows.
 	//
 	// Also, create an array of indices of the valid rows we do have
 	// and the invalid rows we don't have up until we have enough valid rows.
@@ -779,7 +774,7 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 
 	for iShard := 0; iShard < r.DataShards; iShard++ {
 		if len(shards[iShard]) == 0 {
-			if !needAllData && len(idxs) > 0 && !contains(idxs, iShard) {
+			if len(idxs) > 0 && !needAllData && !contains(idxs, iShard) {
 				continue
 			}
 
@@ -789,7 +784,6 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 				shards[iShard] = make([]byte, shardSize)
 			}
 
-			shards[iShard] = make([]byte, shardSize)
 			outputs[outputCount] = shards[iShard]
 			matrixRows[outputCount] = dataDecodeMatrix[iShard]
 			outputCount++
@@ -797,13 +791,10 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 	}
 	r.codeSomeShards(matrixRows, subShards, outputs[:outputCount], outputCount, shardSize)
 
-
 	if dataOnly {
 		// Exit out early if we are only interested in the data shards
 		return nil
 	}
-
-
 
 	// Now that we have all of the data shards intact, we can
 	// compute any of the parity that is missing.
@@ -824,7 +815,6 @@ func (r reedSolomon) reconstruct(shards [][]byte, dataOnly bool, idxs ...int) er
 				shards[iShard] = make([]byte, shardSize)
 			}
 
-			shards[iShard] = make([]byte, shardSize)
 			outputs[outputCount] = shards[iShard]
 			matrixRows[outputCount] = r.parity[iShard-r.DataShards]
 			outputCount++
